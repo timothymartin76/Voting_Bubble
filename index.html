@@ -1,0 +1,213 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Electoral Votes</title>
+    <link href="css/bootstrap.css" rel="stylesheet">
+	<link href='http://fonts.googleapis.com/css?family=Lato' rel='stylesheet' type='text/css'>
+    <style type="text/css">
+      
+      h1{
+        color: black;
+        font-size: 20px;
+		font-family: Lato;
+      }
+	  
+	  h6{
+        color: black;
+      }
+      body {
+        background-color: white;
+        padding-left: 50px;
+      }
+      circle {
+        stroke: black;
+        stroke-width: 1px;
+        opacity: .8;
+      }
+      .btn-group {
+		margin:auto;
+		display:block;
+      }
+	  
+      .label {
+        fill: black;
+        font-size: 14px;
+		font-family: Lato;
+      }
+    </style>
+  </head>
+  
+  <body>
+    
+<h1> 2016 State Electoral Votes & Party Affiliation </h1>
+<h6> A total of 535 state electoral votes are up for grabs with California and Texas having 55 and 38 votes respectively. Gallup's 2015 analysis of political party affiliation at the state level found that 20 states are solidly Republican or leaning Republican, compared with 14 solidly Democratic or leaning Democratic states. The remaining 16 are competitive. </h6>
+
+    </div class="row">
+      <div class="btn-group" data-toggle="buttons">
+        <label class="btn btn-primary active" id="Party_Affiliation2">
+          <input type="radio" name="options"> Party Affiliation
+        </label>
+        <label class="btn btn-primary" id="aggregate">
+          <input type="radio" name="options"> Total
+        </label>
+        <label class="btn btn-primary" id="State">
+          <input type="radio" name="options"> State
+        </label>
+      </div>
+    </div>
+  
+    <div id="chart"></div>
+    <script src="libs/d3.js"></script>
+    <script src="libs/jquery.js"></script>
+    <script src="libs/bootstrap.js"></script>
+    <script src="libs/underscore.js"></script>
+    <script>
+      d3.csv('data/votes.csv', function (error, data) {
+
+        var width = 1600, height = 1100;
+        
+        
+		
+		var fill = d3.scale.ordinal().range(['#cc0000','#d3d3d3',
+          '#ff4d4d', '#0000ff','#6666ff'
+          ])
+        
+        var svg = d3.select("#chart").append("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        for (var j = 0; j < data.length; j++) {
+          data[j].radius = +data[j].Electoral_Votes * 1.55;   //change radius
+          data[j].x = Math.random() * width;
+          data[j].y = Math.random() * height;
+        }
+
+        var padding = 1;
+        var maxRadius = d3.max(_.pluck(data, 'radius'));
+
+        var getCenters = function (vname, size) {
+          var centers, map;
+          centers = _.uniq(_.pluck(data, vname)).map(function (d) {
+            return {name: d, value: 1};
+          });
+
+          map = d3.layout.treemap().size(size).ratio(.8/1); //changes layout
+          map.nodes({children: centers});
+
+          return centers;
+        };
+
+        var nodes = svg.selectAll("circle")
+          .data(data);
+
+        nodes.enter().append("circle")
+          .attr("class", "node")
+          .attr("cx", function (d) { return d.x; })
+          .attr("cy", function (d) { return d.y; })
+          .attr("r", function (d) { return d.radius; })
+          .style("fill", function (d) { return fill(d.Party_Affiliation); })
+          .on("mouseover", function (d) { showPopover.call(this, d); })
+          .on("mouseout", function (d) { removePopovers(); })
+
+        var force = d3.layout.force();
+
+        draw('Party_Affiliation2');
+
+        $( ".btn" ).click(function() {
+          draw(this.id);
+        });
+
+        function draw (varname) {
+          var centers = getCenters(varname, [800, 800]); //change layout column
+          force.on("tick", tick(centers, varname));
+          labels(centers)
+          force.start();
+        }
+
+        function tick (centers, varname) {
+          var foci = {};
+          for (var i = 0; i < centers.length; i++) {
+            foci[centers[i].name] = centers[i];
+          }
+          return function (e) {
+            for (var i = 0; i < data.length; i++) {
+              var o = data[i];
+              var f = foci[o[varname]];
+              o.y += ((f.y + (f.dy / 2)) - o.y) * e.alpha;
+              o.x += ((f.x + (f.dx / 1.65)) - o.x) * e.alpha;
+            }
+            nodes.each(collide(.11))
+              .attr("cx", function (d) { return d.x; })
+              .attr("cy", function (d) { return d.y; });
+          }
+        }
+
+        function labels (centers) {
+          svg.selectAll(".label").remove();
+
+          svg.selectAll(".label")
+          .data(centers).enter().append("text")
+          .attr("class", "label")
+          .text(function (d) { return d.name })
+          .attr("transform", function (d) {
+            return "translate(" + (d.x + (d.dx / 2)) + ", " + (d.y + 80) + ")";
+          });
+        }
+
+        function removePopovers () {
+          $('.popover').each(function() {
+            $(this).remove();
+          }); 
+        }
+
+        function showPopover (d) {
+          $(this).popover({
+            placement: 'auto top',
+            container: 'body',
+            trigger: 'manual',
+            html : true,
+            content: function() { 
+              return "State: " + d.State + "<br/>Party: " + d.Party_Affiliation + "<br/># Electoral Votes: " + d.Electoral_Votes; 
+            }
+          });
+          $(this).popover('show')
+        }
+
+        function collide(alpha) {
+          var quadtree = d3.geom.quadtree(data);
+          return function (d) {
+            var r = d.radius + maxRadius + padding,
+                nx1 = d.x - r,
+                nx2 = d.x + r,
+                ny1 = d.y - r,
+                ny2 = d.y + r;
+            quadtree.visit(function(quad, x1, y1, x2, y2) {
+              if (quad.point && (quad.point !== d)) {
+                var x = d.x - quad.point.x,
+                    y = d.y - quad.point.y,
+                    l = Math.sqrt(x * x + y * y),
+                    r = d.radius + quad.point.radius + padding;
+                if (l < r) {
+                  l = (l - r) / l * alpha;
+                  d.x -= x *= l;
+                  d.y -= y *= l;
+                  quad.point.x += x;
+                  quad.point.y += y;
+                }
+              }
+              return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
+            });
+          };
+        }
+      });
+    </script>
+
+
+
+  </body>
+
+
+</html>
